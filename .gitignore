@@ -1,0 +1,21 @@
+# Python
+_pycache_/
+*.pyc
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Secrets - NEVER commit API keys
+.env
+
+# Vector DB data (regenerable, huge)
+chroma_db/
+
+# Your notes PDFs (personal college material)
+*.pdf
+
+# OS junk
+.DS_Store
+Thumbs.db
