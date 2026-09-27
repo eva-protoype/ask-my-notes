@@ -11,7 +11,7 @@ venv/
 .env
 
 # Vector DB data (regenerable, huge)
-chroma_db/
+chroma/
 
 # Your notes PDFs (personal college material)
 *.pdf
