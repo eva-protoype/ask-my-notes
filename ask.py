@@ -1,7 +1,7 @@
 ##ask.py
 from google import genai
 from dotenv import load_dotenv
-from retrieval imoprt doc_retrieval
+from retrieval import doc_retrieval
 load_dotenv()##loading all api key into the environment
 
 client = genai.Client()
