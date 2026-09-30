@@ -20,7 +20,7 @@ def embed_text(texts):
     
 def get_collection():
     chroma_client = chromadb.PersistentClient()
-     return chroma_client.get_or_create_collection(name="my_notes")
+    return chroma_client.get_or_create_collection(name="my_notes")
 
 def build_store(chunks):
     notes = get_collection()

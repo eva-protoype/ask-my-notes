@@ -23,7 +23,5 @@ def ask(ip_query, coll):
     CONTEXT:
     {fmt_string(retrieved_chunks)}
     """
-    response = client.interactions.create(
-    model=MODEL,
-    input=fmt_prompt)
+    response = client.interactions.create(model=MODEL,input=fmt_prompt)
     return response.output_text
