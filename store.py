@@ -17,10 +17,13 @@ def embed_text(texts):
             contents=text)
         vectors.append(result.embeddings[0].values)
     return vectors
+    
+def get_collection():
+    chroma_client = chromadb.PersistentClient()
+     return chroma_client.get_or_create_collection(name="my_notes")
 
 def build_store(chunks):
-    chroma_client = chromadb.PersistentClient()
-    notes = chroma_client.get_or_create_collection(name="my_notes")
+    notes = get_collection()
     vector = embed_text([c["text"] for c in chunks])
     notes.add(
                     ids=[f"c-{i}" for i in range(0,len(chunks))],
