@@ -19,7 +19,7 @@ def embed_text(texts):
     return vectors
 
 def get_collection(subject):
-    coll_name = "notes-" + subjects
+    coll_name = "notes-" + subject
     chroma_client = chromadb.PersistentClient()
     return chroma_client.get_or_create_collection(name=subject)
 
@@ -27,7 +27,7 @@ def build_store(chunks,subject):
     notes = get_collection(subject) 
     vector = embed_text([c["text"] for c in chunks])
     notes.add(
-                    ids==[f"c-{i}" for i in range(notes.count(),len(chunks)+notes.count())],
+                    ids=[f"c-{i}" for i in range(notes.count(),len(chunks)+notes.count())],
                     embeddings=vector,
                     documents=[c["text"] for c in chunks],
                     metadatas=[{"page":c["page"]} for c in chunks],) ##meta data is always list of dicts
