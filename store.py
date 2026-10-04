@@ -21,7 +21,7 @@ def embed_text(texts):
 def get_collection(subject):
     coll_name = "notes-" + subject
     chroma_client = chromadb.PersistentClient()
-    return chroma_client.get_or_create_collection(name=subject)
+    return chroma_client.get_or_create_collection(name=coll_name)
 
 def build_store(chunks,subject):
     notes = get_collection(subject) 
