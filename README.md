@@ -1,134 +1,183 @@
 # Ask My Notes
 
-A RAG (retrieval-augmented generation) app for asking questions about my own college notes. Give it a PDF, build a local vector store, and ask questions in the terminal. Answers cite the pages used, so I can check them against the notes.
+A multi-subject RAG app for asking questions about my college notes. PDFs are ingested into a separate Chroma collection for each subject, and a FastAPI backend routes questions to that subject's notes. Gemini generates answers from retrieved chunks, with page citations.
 
-Built for my own exam prep first, and as a portfolio project for GenAI/ML internship applications.
+Built by Tanishq Singh for exam prep and as a student portfolio project.
 
-> **Status: working terminal version.** PDF extraction, chunking, embeddings, retrieval, and the ask-question loop are in place. A Streamlit UI is next.
+**Status:** PDF ingestion, per-subject storage, retrieval, and the FastAPI endpoints are implemented. The Streamlit frontend, Docker setup, and deployment are next.
 
-## The idea
-
-Before exams I end up digging through hundreds of pages of PDF notes looking for one concept. Search-by-keyword doesn't help when I don't remember the exact term. This app retrieves relevant passages and asks Gemini to answer from those passages instead.
-
-The prompt tells Gemini to cite a page number for every claim and say it doesn't know when the answer isn't in the context. That's a guard against hallucination, not a guarantee: the citations are there so I can check the answer myself.
-
-## How it works
-
-1. **Extract:** `pypdf` reads the PDF page by page, keeping the page numbers.
-2. **Chunk:** each page is split into chunks of up to **400 words**. A chunk never crosses a page boundary, so its citation maps back to one page.
-3. **Embed and store:** `google-genai` embeds each chunk with `gemini-embedding-2`. ChromaDB stores the vectors, text, and page metadata locally in the `my_notes` collection.
-4. **Retrieve:** the question is embedded with the same model. Chroma returns the three most relevant chunks by default.
-5. **Answer:** `ask.py` puts those chunks and their page numbers into a strict prompt. It calls `client.interactions.create` with `gemini-3.5-flash-lite` to generate the answer.
-6. **Repeat:** `main.py` runs the terminal input loop until I type `quit`.
+This is a single-user app. Subject collections keep different sets of notes separate; they are not user accounts or access controls.
 
 ## Stack
 
-- **pypdf** - PDF text extraction
-- **ChromaDB** - local vector store
-- **Google Gemini API** (`google-genai`) - embeddings and answer generation
-- **python-dotenv** - loads the API key from `.env`
-- **Streamlit** - planned UI, not part of the current terminal app
+- Python 3.12
+- FastAPI and Pydantic
+- pypdf for PDF text extraction
+- ChromaDB with `PersistentClient` for local storage
+- Google Gemini through `google-genai` for embeddings and answers
+- python-dotenv for loading environment variables
 
-## File map
-
-| File | What it does |
-| --- | --- |
-| `extractor.py` | `pdf_pages()` extracts text with page numbers; `chunk_pages()` makes per-page, 400-word chunks. |
-| `store.py` | `embed_text()` generates embeddings; `get_collection()` opens the local collection; `build_store()` adds chunks, vectors, and page metadata. |
-| `retrieval.py` | `doc_retrieval()` returns relevant chunks as a list of `{"page", "text"}` dictionaries. |
-| `ask.py` | Builds the context and strict prompt, then returns Gemini's answer. |
-| `main.py` | Opens the collection and runs the terminal question loop. |
-
-Prototyping happens in a Jupyter notebook first; working code gets copied into `.py` files as it stabilizes. The notebook is the lab, the `.py` files are the app.
+The current code uses `gemini-embedding-2` for embeddings and `gemini-3.5-flash-lite` for answer generation. Your Gemini API key needs access to both models.
 
 ## Setup
 
-Clone the repo:
+Clone the repository:
 
 ```bash
 git clone https://github.com/eva-protoype/ask-my-notes.git
 cd ask-my-notes
 ```
 
-Activate your conda environment, replacing `your-env-name` with its name, then install the dependencies there:
+Create and activate a conda environment:
 
 ```bash
-conda activate your-env-name
+conda create -n ask-my-notes python=3.12 -y
+conda activate ask-my-notes
+```
+
+If you already have a Python 3.12 conda environment, activate that instead.
+
+Install the dependencies inside the active environment:
+
+```bash
+pip install "fastapi[standard]"
 pip install pypdf chromadb google-genai python-dotenv
 ```
 
-Create a `.env` file in the project folder:
+Create a `.env` file in the repository root:
 
 ```dotenv
 GEMINI_API_KEY=your_api_key_here
 ```
 
-Keep `.env` out of git. Both embedding the notes and asking questions need access to the Gemini API and the models named above.
+Keep the key out of source control. The repository's `.gitignore` excludes `.env`, PDFs, and the `chroma/` data directory.
 
-### Build the notes store
+## Ingest a PDF
 
-`main.py` opens the collection but doesn't ingest a PDF for you. Before asking questions, build the store from your notes. Put a text-based PDF in the project folder and run this from the same folder and conda environment, replacing `your_notes.pdf` with its path:
+PDF ingestion currently runs through the Python functions, not an upload endpoint. From the repository root, replace `your_notes.pdf` with a text-based PDF's path:
 
 ```bash
 python - <<'PY'
 from extractor import pdf_pages, chunk_pages
 from store import build_store
 
+subject = "OS"
 pages = pdf_pages("your_notes.pdf")
 chunks = chunk_pages(pages)
-notes = build_store(chunks)
-print(f"Stored {notes.count()} chunks")
+
+if not chunks:
+    raise SystemExit("No text chunks found. Use a PDF with a text layer.")
+
+notes = build_store(chunks, subject)
+print(f"{subject}: {notes.count()} stored chunks")
 PY
 ```
 
-Chroma's `PersistentClient()` uses its default local `chroma/` folder. Keep that folder out of git too, and run ingestion and the terminal app from the same project folder so they use the same store.
+Use uppercase subject names during ingestion, such as `OS` or `DBMS`. The API uppercases the incoming `sub` value, but `build_store()` does not normalize subject names. Ingesting under `os` and asking through the API would target different collections.
 
-The current `build_store()` uses IDs such as `c-0`, `c-1`, and so on. It is a first-build flow, not a replace-PDF flow. To rebuild with different notes, use a fresh store rather than adding new notes over the same IDs. Keep a backup if you need the existing store.
-
-## Run it
-
-Once the store is built:
-
-```bash
-conda activate your-env-name
-python main.py
-```
-
-Ask a question at the prompt:
+`get_collection(subject)` adds the `notes-` prefix internally:
 
 ```text
-Ask your notes (or 'quit'): What is the convoy effect?
+OS   -> notes-OS
+DBMS -> notes-DBMS
 ```
 
-Type `quit` to exit.
+Pass `OS`, not `notes-OS`, to the ingestion function or API. Use simple subject names with letters, numbers, underscores, or hyphens.
 
-## Testing
+Chroma uses `PersistentClient()` without an explicit path. Run ingestion and the API from the same repository directory so they use the same local store.
 
-The terminal flow has been tested with a small, three-page sample PDF of operating-system notes. With that PDF loaded, useful checks are:
+Ingestion appends chunks. Running the same PDF through `build_store()` again duplicates its content; it does not replace the previous version.
 
-- Ask about starvation or the convoy effect: the answer should cite page 2.
-- Ask about the TLB: the answer should cite page 3.
-- Ask "What is Docker?": it isn't covered by the sample notes, so the answer should say it doesn't know.
+## Run the API
 
-Use your own PDF path when building the store; the sample PDF is a test input, not a required dependency.
+From the repository root, with the conda environment active:
+
+```bash
+fastapi dev api.py
+```
+
+The development server normally runs at `http://127.0.0.1:8000`. Open `http://127.0.0.1:8000/docs` for the interactive API docs.
+
+### List subjects
+
+```bash
+curl http://127.0.0.1:8000/subjects
+```
+
+`GET /subjects` returns a JSON array of collection names with the `notes-` prefix removed. For example, after ingesting OS and DBMS notes:
+
+```json
+["OS", "DBMS"]
+```
+
+### Ask a question
+
+```bash
+curl -X POST http://127.0.0.1:8000/ask/ \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "What is the convoy effect?", "sub": "OS"}'
+```
+
+The request body uses `query` and `sub`:
+
+```json
+{
+  "query": "What is the convoy effect?",
+  "sub": "OS"
+}
+```
+
+`POST /ask/` returns the answer as a JSON string, not an object with separate `answer` and `sources` fields. Page citations are part of the generated answer text.
+
+You can also use **Try it out** in `/docs`. Ingest notes for the chosen subject before asking questions.
+
+## How it works
+
+```text
+PDF -> page text -> per-page chunks -> Gemini embeddings
+                                          |
+                                  notes-<subject> in Chroma
+                                          |
+Question + subject -> question embedding -> top 3 chunks
+                                          |
+                              Gemini answer with page citations
+```
+
+1. `pdf_pages()` extracts text with PDF page numbers starting at 1.
+2. `chunk_pages()` splits each page into chunks of up to 400 words. Chunks never cross page boundaries.
+3. `build_store()` embeds the chunks and stores their text, vectors, and page metadata in the subject's collection.
+4. `doc_retrieval()` embeds the question using the same embedding model and retrieves three chunks by default.
+5. `ask()` formats the retrieved context as `[page:N]` passages and asks Gemini to answer only from that context, cite every claim, and say it doesn't know when the context lacks the answer.
+6. `api.py` exposes the question flow and subject list through FastAPI.
+
+## File map
+
+| File | Role |
+| --- | --- |
+| `extractor.py` | `pdf_pages()` and `chunk_pages()` for PDF extraction and chunking. |
+| `store.py` | Gemini embeddings, subject collections, ingestion, and `list_subjects()`. |
+| `retrieval.py` | Retrieves relevant chunks from the selected subject. |
+| `ask.py` | Builds the context and prompt, calls Gemini, and returns answer text. |
+| `api.py` | Pydantic request model, `POST /ask/`, and `GET /subjects`. |
 
 ## Current limits
 
-- PDFs need a text layer. Blank pages and pages without extractable text are skipped; there is no OCR step yet.
-- The terminal app uses an already-built collection. PDF upload and switching between notes aren't implemented in a UI yet.
-- Page numbers refer to the PDF's page order, starting at 1, which may differ from page numbers printed inside the notes.
-- Retrieval can miss useful context, and generated answers can still be wrong. Check the cited pages.
+- No OCR: pages without extractable text are skipped.
+- No authentication or user-level separation. Keep the development API local.
+- No PDF upload endpoint or frontend yet.
+- Unknown subjects are not explicitly rejected: the collection helper can create an empty collection. Use subjects that have already been ingested.
+- Chunk IDs are based on the collection count. Deleting chunks can cause ID collisions during later ingestion; PDF replacement is not implemented.
+- Citations contain page numbers but no source filename, so multiple PDFs in one subject can have ambiguous page references.
+- Retrieval and generated answers can be wrong. The citation prompt is a check against hallucination, not a guarantee. Verify answers against the notes.
+- Gemini API access, quotas, and model availability affect both ingestion and questions.
 
 ## Roadmap
 
-- [x] Extract text from a PDF with pypdf
-- [x] Split each page into 400-word chunks, tracking page numbers
-- [x] Embed chunks and store them in ChromaDB
-- [x] Query flow: retrieve relevant chunks, answer with Gemini, cite pages
-- [x] Terminal version of the full ask-question loop
-- [ ] Streamlit UI (upload PDF, chat interface, citations shown inline)
-- [ ] Maybe: quiz mode - generate practice questions from the notes
-
-## Why this project
-
-My last project (heart disease classification) proved I can do the standard ML workflow, but it followed a well-known course structure. This one is my own problem, built end to end: a PDF pipeline, an LLM integration, and retrieval with citations as a guard against hallucination. The terminal version works now; next is a UI I will actually use before exams.
+- [x] PDF extraction and per-page chunking
+- [x] Gemini embeddings and persistent Chroma storage
+- [x] Separate collections per subject
+- [x] Retrieval and answers with page citations
+- [x] FastAPI question and subject-list endpoints
+- [ ] Streamlit frontend with a subject picker and chat interface
+- [ ] Docker setup for the backend and frontend
+- [ ] Deployment with persistent storage and environment-based secrets
