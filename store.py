@@ -9,6 +9,8 @@ load_dotenv()##loading the environment vars in the OS
 client = genai.Client()
 EMBED_M = "gemini-embedding-2"
 
+chroma_client = chromadb.PersistentClient()
+
 def embed_text(texts):
     vectors = []
     for text in texts:
@@ -20,7 +22,6 @@ def embed_text(texts):
 
 def get_collection(subject):
     coll_name = "notes-" + subject
-    chroma_client = chromadb.PersistentClient()
     return chroma_client.get_or_create_collection(name=coll_name)
 
 def build_store(chunks,subject):
@@ -33,3 +34,6 @@ def build_store(chunks,subject):
                     metadatas=[{"page":c["page"]} for c in chunks],) ##meta data is always list of dicts
     #print(notes.count()) just for checking purposes
     return notes
+
+def list_subjects():
+    return [i.name[6:] for i in chroma_client.list_collections()]
