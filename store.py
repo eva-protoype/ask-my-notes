@@ -4,12 +4,14 @@ from dotenv import load_dotenv
 from google import genai
 import chromadb
 
+EMBED_M = "gemini-embedding-001"##changing the model back to 001 for individual embeddings for each chunk (not aggregated)
+DB_PATH = "chroma_db"
+
 load_dotenv()##loading the environment vars in the OS
 
 client = genai.Client()
-EMBED_M = "gemini-embedding-001"##changing the model back to 001 for individual embeddings for each chunk (not aggregated)
 
-chroma_client = chromadb.PersistentClient()
+chroma_client = chromadb.PersistentClient(DB_PATH)
 
 def embed_text(texts):
     result = client.models.embed_content(
