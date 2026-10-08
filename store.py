@@ -7,31 +7,30 @@ import chromadb
 load_dotenv()##loading the environment vars in the OS
 
 client = genai.Client()
-EMBED_M = "gemini-embedding-2"
+EMBED_M = "gemini-embedding-001"##changing the model back to 001 for individual embeddings for each chunk (not aggregated)
 
 chroma_client = chromadb.PersistentClient()
 
 def embed_text(texts):
-    vectors = []
-    for text in texts:
-        result = client.models.embed_content(
+    result = client.models.embed_content(
             model=EMBED_M,
-            contents=text)
-        vectors.append(result.embeddings[0].values)
-    return vectors
+            contents=texts)
+    return [e.values for e in result.embeddings]
 
 def get_collection(subject):
-    coll_name = "notes-" + subject
+    coll_name = "notes-" + subject.upper()
     return chroma_client.get_or_create_collection(name=coll_name)
 
-def build_store(chunks,subject):
-    notes = get_collection(subject) 
+def build_store(chunks,subject,file_name,file_hash):
+    notes = get_collection(subject)
     vector = embed_text([c["text"] for c in chunks])
-    notes.add(
-                    ids=[f"c-{i}" for i in range(notes.count(),len(chunks)+notes.count())],
+    notes.delete(
+                	where={"source" : file_name})
+    notes.upsert(
+                    ids = [f"{file_hash}-{i}" for i in range(len(chunks))],
                     embeddings=vector,
                     documents=[c["text"] for c in chunks],
-                    metadatas=[{"page":c["page"]} for c in chunks],) ##meta data is always list of dicts
+                    metadatas=[{"page":c["page"], "source":file_name} for c in chunks],) ##meta data is always list of dicts
     #print(notes.count()) just for checking purposes
     return notes
 
